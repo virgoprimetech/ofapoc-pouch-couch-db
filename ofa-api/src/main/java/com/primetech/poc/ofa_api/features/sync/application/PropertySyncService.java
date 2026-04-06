@@ -70,12 +70,12 @@ public class PropertySyncService {
 
   @Transactional
   public void syncDocument(JsonNode doc) {
-    String couchId = doc.path("_id").asText();
+    String couchId = doc.path("_id").asString();
     UUID id = extractUuid(couchId);
-    String rev = doc.path("_rev").asText();
+    String rev = doc.path("_rev").asString();
 
     boolean deleted = !doc.path("deleted_at").isNull()
-        && !doc.path("deleted_at").asText().isEmpty();
+        && !doc.path("deleted_at").asString().isEmpty();
 
     if (deleted) {
       softDelete(id, rev, doc);
@@ -100,7 +100,7 @@ public class PropertySyncService {
     }
 
     // Only update if CouchDB updated_at >= PG updated_at
-    Instant couchUpdatedAt = parseInstant(doc.path("updated_at").asText());
+    Instant couchUpdatedAt = parseInstant(doc.path("updated_at").asString());
     if (couchUpdatedAt != null && property.getUpdatedAt() != null
         && couchUpdatedAt.isBefore(property.getUpdatedAt())) {
       log.debug("[sync] Skipping property {} — PG is newer", id);
@@ -123,7 +123,7 @@ public class PropertySyncService {
       return;
     }
 
-    Instant deletedAt = parseInstant(doc.path("deleted_at").asText());
+    Instant deletedAt = parseInstant(doc.path("deleted_at").asString());
     property.setDeletedAt(deletedAt != null ? deletedAt : Instant.now());
     property.setStatus(PropertyStatus.ARCHIVED);
     property.setCouchdbRev(rev);
@@ -132,32 +132,32 @@ public class PropertySyncService {
   }
 
   private void applyFields(Property property, JsonNode doc) {
-    property.setName(nullIfEmpty(doc.path("name").asText()));
-    property.setPropertyType(parseEnum(doc.path("property_type").asText(), PropertyType.class, PropertyType.OTHER));
-    property.setStatus(parseEnum(doc.path("status").asText(), PropertyStatus.class, PropertyStatus.DRAFT));
-    property.setDescription(nullIfEmpty(doc.path("description").asText()));
-    property.setAddressLine1(nullIfEmpty(doc.path("address_line1").asText()));
-    property.setAddressLine2(nullIfEmpty(doc.path("address_line2").asText()));
-    property.setCity(nullIfEmpty(doc.path("city").asText()));
-    property.setStateProvince(nullIfEmpty(doc.path("state_province").asText()));
-    property.setPostalCode(nullIfEmpty(doc.path("postal_code").asText()));
-    property.setCountry(nullIfEmpty(doc.path("country").asText()));
+    property.setName(nullIfEmpty(doc.path("name").asString()));
+    property.setPropertyType(parseEnum(doc.path("property_type").asString(), PropertyType.class, PropertyType.OTHER));
+    property.setStatus(parseEnum(doc.path("status").asString(), PropertyStatus.class, PropertyStatus.DRAFT));
+    property.setDescription(nullIfEmpty(doc.path("description").asString()));
+    property.setAddressLine1(nullIfEmpty(doc.path("address_line1").asString()));
+    property.setAddressLine2(nullIfEmpty(doc.path("address_line2").asString()));
+    property.setCity(nullIfEmpty(doc.path("city").asString()));
+    property.setStateProvince(nullIfEmpty(doc.path("state_province").asString()));
+    property.setPostalCode(nullIfEmpty(doc.path("postal_code").asString()));
+    property.setCountry(nullIfEmpty(doc.path("country").asString()));
     property.setLatitude(parseBigDecimal(doc, "latitude"));
     property.setLongitude(parseBigDecimal(doc, "longitude"));
-    property.setPhone(nullIfEmpty(doc.path("phone").asText()));
-    property.setEmail(nullIfEmpty(doc.path("email").asText()));
-    property.setWebsite(nullIfEmpty(doc.path("website").asText()));
-    property.setTimezone(nullIfEmpty(doc.path("timezone").asText()));
-    property.setCurrency(nullIfEmpty(doc.path("currency").asText()));
+    property.setPhone(nullIfEmpty(doc.path("phone").asString()));
+    property.setEmail(nullIfEmpty(doc.path("email").asString()));
+    property.setWebsite(nullIfEmpty(doc.path("website").asString()));
+    property.setTimezone(nullIfEmpty(doc.path("timezone").asString()));
+    property.setCurrency(nullIfEmpty(doc.path("currency").asString()));
     property.setTotalRooms(parseInteger(doc, "total_rooms"));
-    property.setTenantId(nullIfEmpty(doc.path("tenant_id").asText()));
+    property.setTenantId(nullIfEmpty(doc.path("tenant_id").asString()));
 
-    Instant createdAt = parseInstant(doc.path("created_at").asText());
+    Instant createdAt = parseInstant(doc.path("created_at").asString());
     if (createdAt != null) {
       property.setCreatedAt(createdAt);
     }
 
-    Instant updatedAt = parseInstant(doc.path("updated_at").asText());
+    Instant updatedAt = parseInstant(doc.path("updated_at").asString());
     if (updatedAt != null) {
       property.setUpdatedAt(updatedAt);
     }

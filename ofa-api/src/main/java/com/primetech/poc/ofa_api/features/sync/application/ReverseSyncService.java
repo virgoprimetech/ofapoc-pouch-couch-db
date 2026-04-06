@@ -62,7 +62,7 @@ public class ReverseSyncService {
       if (rev == null || rev.isEmpty()) {
         JsonNode existing = couchDbClient.getDocument(docId);
         if (existing != null && existing.has("_rev")) {
-          rev = existing.get("_rev").asText();
+          rev = existing.get("_rev").asString();
         }
       }
 

@@ -30,7 +30,7 @@ public class CouchDbClient {
         .body(JsonNode.class);
 
     if (response != null && response.has("update_seq")) {
-      return response.get("update_seq").asText();
+      return response.get("update_seq").asString();
     }
     return "0";
   }
@@ -56,7 +56,7 @@ public class CouchDbClient {
     List<JsonNode> docs = List.of();
     if (response.has("results") && response.get("results").isArray()) {
       docs = List.copyOf(response.get("results").findValues("doc").stream()
-          .filter(doc -> doc.has("type") && "property".equals(doc.get("type").asText()))
+          .filter(doc -> doc.has("type") && "property".equals(doc.get("type").asString()))
           .toList());
     }
 
@@ -79,7 +79,7 @@ public class CouchDbClient {
     }
 
     return response.get("rows").findValues("doc").stream()
-        .filter(doc -> doc.has("type") && "property".equals(doc.get("type").asText()))
+        .filter(doc -> doc.has("type") && "property".equals(doc.get("type").asString()))
         .toList();
   }
 
@@ -126,7 +126,7 @@ public class CouchDbClient {
 
     return response.get("rows").valueStream()
         .map(row -> row.path("doc"))
-        .filter(doc -> doc.has("type") && "property".equals(doc.get("type").asText()))
+        .filter(doc -> doc.has("type") && "property".equals(doc.get("type").asString()))
         .filter(doc -> doc.has("_conflicts") && doc.get("_conflicts").isArray() && !doc.get("_conflicts").isEmpty())
         .map(doc -> new ConflictInfo(
             doc.path("_id").asString(),

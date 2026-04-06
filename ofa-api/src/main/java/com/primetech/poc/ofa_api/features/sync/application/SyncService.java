@@ -66,7 +66,7 @@ public class SyncService {
         propertySyncService.syncDocument(doc);
       } catch (Exception e) {
         log.error("[sync] Bootstrap failed for doc {}: {}",
-            doc.path("_id").asText(), e.getMessage(), e);
+            doc.path("_id").asString(), e.getMessage(), e);
       }
     }
 
@@ -100,7 +100,7 @@ public class SyncService {
         propertySyncService.syncDocument(doc);
       } catch (Exception e) {
         log.error("[sync] Failed to sync doc {}: {}",
-            doc.path("_id").asText(), e.getMessage(), e);
+            doc.path("_id").asString(), e.getMessage(), e);
       }
     }
 
