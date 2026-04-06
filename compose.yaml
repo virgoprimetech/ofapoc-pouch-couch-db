@@ -1,0 +1,63 @@
+# OFA POC - PouchDB/CouchDB Sync
+#
+# Services:
+#   postgres   - PostgreSQL 17 for ofa-api (Spring Boot / JPA / Liquibase)
+#   couchdb    - CouchDB 3.x as PouchDB sync target (offline-first web app)
+#   couchdb-init - One-time CouchDB configuration (single-node + CORS)
+#
+# Usage:
+#   docker compose up -d
+#   http://localhost:5984/_utils  — CouchDB Fauxton UI
+
+services:
+  ofa-postgres:
+    image: postgres:18.3-alpine
+    container_name: ofa-postgres
+    restart: unless-stopped
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-ofa}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-ofa}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  couchdb:
+    image: couchdb:latest
+    container_name: ofa-couchdb
+    restart: unless-stopped
+    ports:
+      - "${COUCHDB_PORT:-5984}:5984"
+    environment:
+      COUCHDB_USER: ${COUCHDB_USER:-admin}
+      COUCHDB_PASSWORD: ${COUCHDB_PASSWORD:-admin}
+    volumes:
+      - couchdata:/opt/couchdb/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5984/_up"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  couchdb-init:
+    image: curlimages/curl:latest
+    container_name: ofa-couchdb-init
+    depends_on:
+      couchdb:
+        condition: service_healthy
+    restart: "no"
+    volumes:
+      - ./scripts/init-couchdb.sh:/init.sh:ro
+    entrypoint: ["sh", "/init.sh"]
+
+volumes:
+  pgdata:
+  couchdata:
