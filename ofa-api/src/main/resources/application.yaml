@@ -1,0 +1,30 @@
+spring:
+  application:
+    name: ofa-api
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/ofa
+    username: postgres
+    password: postgres
+    hikari:
+      maximum-pool-size: 10
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          batch_size: 30
+
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.xml
+
+ofa:
+  sync:
+    enabled: true
+    couchdb:
+      url: http://admin:admin@localhost:5984
+      database: properties
+    poll-interval: 5000
