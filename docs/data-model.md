@@ -198,5 +198,5 @@ The PostgreSQL ETL process is the final authority. If the server-side truth diff
 |------|---------|----------------|
 | `useProperties(tenantId?)` | `{ properties, isLoading, error, create, update, softDelete, refetch }` | `changes()` with filter function, `live: true` |
 | `useProperty(id)` | `{ property, isLoading, error, update, softDelete, refetch }` | `changes()` with `doc_ids: [id]` for single-doc tracking |
-| `useSyncStatus()` | `SyncStatus` (`"idle"` \| `"syncing"` \| `"synced"` \| `"error"` \| `"offline"`) | Pub-sub via `onSyncStatusChange()` |
+| `useSyncStatus()` | `SyncStatus` (`"idle"` \| `"syncing"` \| `"synced"` \| `"error"` \| `"offline"` \| `"retrying"`) | Pub-sub via `onSyncStatusChange()` |
 | `useOnline()` | `boolean` | `navigator.onLine` + `window.online`/`offline` events |

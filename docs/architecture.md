@@ -203,22 +203,13 @@ The `update` method uses a read-merge-write pattern: it reads the current docume
 
 ### Sync (`sync.ts`)
 
-Sync starts when the `SyncStatusIcon` component mounts in the sidebar footer. Configuration:
+Sync starts when the `SyncProvider` component mounts in the app shell. It uses bidirectional live replication with a two-layer exponential backoff strategy (PouchDB internal + lifecycle retry) and a generation counter to prevent stale event handlers.
 
-```typescript
-db.sync(remoteDb, {
-  live: true,          // continuous replication
-  retry: true,         // auto-reconnect on failure
-  heartbeat: 10_000,   // 10-second heartbeat
-  back_off_function: (delay) => Math.min(delay * 2, 60_000),
-});
-```
+For the full sync reference including retry/backoff, status state machine, conflict detection, and SSR handling, see [pouchdb-couchdb-sync.md](pouchdb-couchdb-sync.md).
 
-**Sync status** uses a publish-subscribe pattern. Components subscribe with `onSyncStatusChange(callback)` and receive status updates: `idle`, `syncing`, `synced`, `error`, or `offline`.
+**Sync status** uses a publish-subscribe pattern. Components subscribe with `onSyncStatusChange(callback)` and receive status updates: `idle`, `syncing`, `synced`, `error`, `offline`, or `retrying`.
 
-**Network listeners** are registered exactly once using a `networkListenersAttached` guard flag. The `window.online` event restarts sync after the browser regains connectivity.
-
-**Conflict resolution**: Last-write-wins by `updated_at` timestamp. When a document has conflicting revisions, `resolveConflicts(docId)` fetches all revisions, picks the one with the latest `updated_at`, and deletes the losers. PostgreSQL ETL is the final authority — the client resolves locally but the server can override.
+**Conflict resolution** supports three modes: automatic last-write-wins, manual quick resolution (pick a winning revision), and manual advanced resolution (field-level merge). PostgreSQL ETL is the final authority — the client resolves locally but the server can override.
 
 ### React hooks
 
