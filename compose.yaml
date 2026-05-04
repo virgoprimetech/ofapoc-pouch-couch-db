@@ -39,6 +39,7 @@ services:
       COUCHDB_USER: ${COUCHDB_USER:-admin}
       COUCHDB_PASSWORD: ${COUCHDB_PASSWORD:-admin}
     volumes:
+      - ./config/couchdb/local.ini:/opt/couchdb/etc/local.ini:ro
       - couchdata:/opt/couchdb/data
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5984/_up"]
@@ -55,7 +56,7 @@ services:
         condition: service_healthy
     restart: "no"
     volumes:
-      - ./scripts/init-couchdb.sh:/init.sh:ro
+      - ./config/couchdb/scripts/init-couchdb.sh:/init.sh:ro
     entrypoint: ["sh", "/init.sh"]
 
 volumes:

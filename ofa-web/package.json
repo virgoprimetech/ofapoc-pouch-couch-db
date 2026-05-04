@@ -1,0 +1,46 @@
+{
+  "name": "ofa-web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "dev:sw": "next build && next start",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "clean": "rm -rf .next/ cache/"
+  },
+  "dependencies": {
+    "@remixicon/react": "^4.9.0",
+    "@types/pouchdb-browser": "^6.1.5",
+    "@types/pouchdb-find": "^7.3.3",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.7.0",
+    "next": "16.2.3",
+    "pouchdb-browser": "^9.0.0",
+    "pouchdb-find": "^9.0.0",
+    "radix-ui": "^1.4.3",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "shadcn": "^4.1.2",
+    "tailwind-merge": "^3.5.0",
+    "tw-animate-css": "^1.4.0",
+    "zod": "^4.3.6",
+    "zustand": "^5.0.12"
+  },
+  "devDependencies": {
+    "@serwist/next": "^9.5.7",
+    "@serwist/turbopack": "^9.5.7",
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "esbuild": "^0.28.0",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.2",
+    "serwist": "^9.5.7",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}

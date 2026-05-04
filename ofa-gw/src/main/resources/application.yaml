@@ -1,0 +1,82 @@
+app:
+  couchdb:
+    proxy-auth:
+      secret: ${COUCHDB_PROXY_AUTH_SECRET:SET_ME_PLEASE}
+      algorithm: ${APP_HMAC_ALGORITHM:HmacSHA256}
+      encoding: ${APP_HMAC_ENCODING:UTF-8}
+
+server:
+  port: 8080
+
+spring:
+  application:
+    name: ofa-gw
+  cloud:
+    gateway:
+      server:
+        webflux:
+          default-filters:
+            - RemoveRequestHeader=Cookie
+            - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
+
+          httpClient:
+            wiretap: true
+            pool:
+              type: ELASTIC
+              max-connections: 1000
+              max-idle-time: 10s
+              max-lifetime: 10s
+              keep-alive-time: 10s
+            response-chunk-size: 102400
+            connect-timeout: 5000
+            response-timeout: 5000
+          routes:
+            - id: auth-service
+              uri: http://localhost:8082/identity
+              predicates:
+                - Path=/identity/**
+              filters:
+                - StripPrefix=1
+            - id: couchdb
+              uri: http://localhost:5984
+              predicates:
+                - Path=/db/**, /_session, /_all_dbs
+              filters:
+                - StripPrefix=1
+                # Spring matches "CouchedbAuthorization" to your "CouchedbAuthorizationFilterFactory"
+                - CouchedbAuthorizationFilterFactory
+
+          globalcors:
+            add-to-simple-url-handler-mapping: true
+            cors-configurations:
+              '[/**]':
+                allowedOrigins:
+                  - "http://localhost:3000"
+                allowedMethods:
+                  - GET
+                  - POST
+                  - PUT
+                  - DELETE
+                  - OPTIONS
+                allowedHeaders:
+                  - "*"
+                allowCredentials: true
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: http://localhost:8082/identity/.well-known/jwks.json
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,gateway,metrics
+  endpoint:
+    gateway:
+      enabled: true
+
+logging:
+  level:
+    org.springframework.cloud.gateway: DEBUG
+    reactor.netty: DEBUG
