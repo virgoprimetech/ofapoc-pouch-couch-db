@@ -6,7 +6,7 @@ import java.util.UUID;
 /**
  * Refresh Response
  */
-public record RefreshResponse(
+public record RefreshTokenResponse(
     String accessToken,
     String refreshToken,
     String tokenType,
@@ -16,7 +16,7 @@ public record RefreshResponse(
     String email,
     List<String> roles
 ) {
-  public RefreshResponse {
+  public RefreshTokenResponse {
     tokenType = "Bearer";
   }
 }

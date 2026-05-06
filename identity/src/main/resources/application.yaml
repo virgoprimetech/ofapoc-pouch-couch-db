@@ -4,6 +4,8 @@ server:
     context-path: /identity
 
 spring:
+  main:
+    allow-bean-definition-overriding: true
   application:
     name: identity
 
@@ -134,10 +136,11 @@ app:
     url: ${COUCHDB_URL:http://localhost:5984}
     connect-timeout: ${COUCHDB_CONNECT_TIMEOUT:5s}
     read-timeout: ${COUCHDB_READ_TIMEOUT:30s}
+    scoped-dbs: ${SCOPED_DBS:ofa_pms}
     proxy-auth:
       username: ${COUCHDB_PROXY_AUTH_USERNAME:admin}
       roles: ${COUCHDB_PROXY_AUTH_ROLES:_admin}
-      secret: ${COUCHDB_PROXY_AUTH_SECRET:change-me}
+      secret: ${COUCHDB_PROXY_AUTH_SECRET:SET_ME_PLEASE}
       algorithm: ${COUCHDB_PROXY_AUTH_ALGORITHM:HmacSHA1}
       encoding: ${COUCHDB_PROXY_AUTH_ENCODING:UTF-8}
 

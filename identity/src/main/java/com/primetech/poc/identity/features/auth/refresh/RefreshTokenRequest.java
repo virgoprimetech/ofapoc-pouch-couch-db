@@ -5,7 +5,7 @@ import jakarta.validation.constraints.NotBlank;
 /**
  * Refresh Request
  */
-public record RefreshRequest(
+public record RefreshTokenRequest(
     @NotBlank(message = "Refresh token is required")
     String refreshToken
 ) {
