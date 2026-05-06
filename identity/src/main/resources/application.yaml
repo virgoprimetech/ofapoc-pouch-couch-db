@@ -129,6 +129,18 @@ management:
         enabled: false
 
 # Logging Configuration
+app:
+  couchdb:
+    url: ${COUCHDB_URL:http://localhost:5984}
+    connect-timeout: ${COUCHDB_CONNECT_TIMEOUT:5s}
+    read-timeout: ${COUCHDB_READ_TIMEOUT:30s}
+    proxy-auth:
+      username: ${COUCHDB_PROXY_AUTH_USERNAME:admin}
+      roles: ${COUCHDB_PROXY_AUTH_ROLES:_admin}
+      secret: ${COUCHDB_PROXY_AUTH_SECRET:change-me}
+      algorithm: ${COUCHDB_PROXY_AUTH_ALGORITHM:HmacSHA1}
+      encoding: ${COUCHDB_PROXY_AUTH_ENCODING:UTF-8}
+
 logging:
   level:
     com.primetech.poc.identity: DEBUG
