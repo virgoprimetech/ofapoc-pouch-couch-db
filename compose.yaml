@@ -39,7 +39,7 @@ services:
       COUCHDB_USER: ${COUCHDB_USER:-admin}
       COUCHDB_PASSWORD: ${COUCHDB_PASSWORD:-admin}
     volumes:
-      - ./config/couchdb/local.ini:/opt/couchdb/etc/local.ini:ro
+      - ./config/couchdb/local.ini:/opt/couchdb/etc/local.ini
       - couchdata:/opt/couchdb/data
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5984/_up"]

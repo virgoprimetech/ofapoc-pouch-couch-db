@@ -1,20 +1,18 @@
 package com.primetech.poc.identity.features.user.create;
 
-import com.github.f4b6a3.uuid.UuidCreator;
+import com.primetech.poc.identity.features.user.create.chain.CreateUserChain;
+import com.primetech.poc.identity.features.user.create.chain.CreateUserContext;
+import com.primetech.poc.identity.features.user.create.chain.CreateUserProcessor;
 import com.primetech.poc.identity.features.user.domain.User;
-import com.primetech.poc.identity.features.user.infrastructure.UserEntity;
-import com.primetech.poc.identity.features.user.infrastructure.UserJpaMapper;
-import com.primetech.poc.identity.features.user.infrastructure.UserMapper;
-import com.primetech.poc.identity.features.user.infrastructure.UserRepository;
-import com.primetech.poc.identity.shared.exception.DuplicateEntityException;
+import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
-import java.util.UUID;
+import java.util.Comparator;
+import java.util.List;
+
 
 /**
  * Create User Handler
@@ -22,24 +20,15 @@ import java.util.UUID;
  * Handles the creation of new users.
  */
 @Component
+@Slf4j
 public class CreateUserHandler {
 
-  private static final Logger log = LoggerFactory.getLogger(CreateUserHandler.class);
+  private final List<CreateUserProcessor> processors;
 
-  private final UserRepository repository;
-  private final UserJpaMapper jpaMapper;
-  private final UserMapper userMapper;
-  private final PasswordEncoder passwordEncoder;
-
-  public CreateUserHandler(
-      UserRepository repository,
-      UserJpaMapper jpaMapper,
-      UserMapper userMapper,
-      PasswordEncoder passwordEncoder) {
-    this.repository = repository;
-    this.jpaMapper = jpaMapper;
-    this.userMapper = userMapper;
-    this.passwordEncoder = passwordEncoder;
+  public CreateUserHandler(List<CreateUserProcessor> processors) {
+    this.processors = processors.stream()
+        .sorted(Comparator.comparingInt(CreateUserProcessor::getOrder))
+        .toList();
   }
 
   /**
@@ -52,30 +41,22 @@ public class CreateUserHandler {
   public User handle(CreateUserCommand command) {
     log.debug("Creating user with username: {}", command.username());
 
-    // Check if username already exists
-    if (repository.existsByUsername(command.username())) {
-      throw new DuplicateEntityException("User", "username", command.username());
+    CreateUserContext context = new CreateUserContext(command);
+    executeChain(context);
+    return context.getUser();
+  }
+
+  private void executeChain(CreateUserContext context) {
+    createChain(0).process(context);
+  }
+
+  private CreateUserChain createChain(int index) {
+    if (index >= processors.size()) {
+      return ignored -> { };
     }
 
-    // Check if email already exists
-    if (repository.existsByEmail(command.email())) {
-      throw new DuplicateEntityException("User", "email", command.email());
-    }
-
-    Instant now = Instant.now();
-    UUID id = UuidCreator.getTimeOrderedEpoch();
-    String passwordHash = passwordEncoder.encode(command.password());
-
-    // Map command to domain model
-    User user = userMapper.toDomain(command, id, passwordHash, now);
-
-    // Convert to entity and save
-    UserEntity entity = jpaMapper.toEntity(user);
-    UserEntity saved = repository.save(entity);
-
-    log.info("User created: {}", saved.getId());
-
-    // Return domain model
-    return jpaMapper.toDomain(saved);
+    CreateUserProcessor currentProcessor = processors.get(index);
+    CreateUserChain nextChain = createChain(index + 1);
+    return ctx -> currentProcessor.process(ctx, nextChain);
   }
 }

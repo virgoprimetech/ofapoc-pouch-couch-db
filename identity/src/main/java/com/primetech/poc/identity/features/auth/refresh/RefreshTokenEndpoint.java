@@ -12,17 +12,17 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/auth")
-class RefreshEndpoint {
+class RefreshTokenEndpoint {
 
-  private final RefreshHandler handler;
+  private final RefreshTokenHandler handler;
 
-  public RefreshEndpoint(RefreshHandler handler) {
+  public RefreshTokenEndpoint(RefreshTokenHandler handler) {
     this.handler = handler;
   }
 
   @PostMapping("/refresh")
-  public ResponseEntity<RefreshResponse> refresh(@Valid @RequestBody RefreshRequest request) {
-    RefreshResponse response = handler.handle(request.refreshToken());
+  public ResponseEntity<RefreshTokenResponse> refresh(@Valid @RequestBody RefreshTokenRequest request) {
+    RefreshTokenResponse response = handler.handle(request.refreshToken());
     return ResponseEntity.ok(response);
   }
 }

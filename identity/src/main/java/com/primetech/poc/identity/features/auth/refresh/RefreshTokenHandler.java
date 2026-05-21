@@ -30,9 +30,9 @@ import java.util.stream.Collectors;
  * Refresh Handler
  */
 @Component
-public class RefreshHandler {
+public class RefreshTokenHandler {
 
-  private static final Logger log = LoggerFactory.getLogger(RefreshHandler.class);
+  private static final Logger log = LoggerFactory.getLogger(RefreshTokenHandler.class);
 
   private final JwtTokenProvider jwtTokenProvider;
   private final TenantRepository tenantRepository;
@@ -42,7 +42,7 @@ public class RefreshHandler {
   private final RoleJpaMapper roleJpaMapper;
   private final UserRoleAssignmentRepository assignmentRepository;
 
-  public RefreshHandler(
+  public RefreshTokenHandler(
       JwtTokenProvider jwtTokenProvider,
       TenantRepository tenantRepository,
       UserRepository userRepository,
@@ -60,7 +60,7 @@ public class RefreshHandler {
   }
 
   @Transactional(readOnly = true)
-  public RefreshResponse handle(String refreshToken) {
+  public RefreshTokenResponse handle(String refreshToken) {
     log.debug("Refresh token request");
 
     // Validate refresh token
@@ -148,7 +148,7 @@ public class RefreshHandler {
 
       log.info("Token refreshed for tenant: {}, user: {}", tenant.getCode(), user.id());
 
-      return new RefreshResponse(
+      return new RefreshTokenResponse(
           newAccessToken,
           newRefreshToken,
           "Bearer",

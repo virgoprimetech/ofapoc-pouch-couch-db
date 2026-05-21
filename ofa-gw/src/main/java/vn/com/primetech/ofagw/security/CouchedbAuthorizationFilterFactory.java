@@ -40,17 +40,6 @@ public class CouchedbAuthorizationFilterFactory extends AbstractGatewayFilterFac
               couchdbProperties.getProxyAuth().getEncoding());
           final var token = HexFormat.of().formatHex(tokenByte);
 
-          // 1. Calculate the New Path: /db/anything -> /user-{user}/anything
-          // Normalize double slashes
-
-//          final var path = exchange.getRequest().getURI().getRawPath();
-//          if (path.startsWith("/_")) {
-//            return chain.filter(exchange);
-//          }
-
-//          final var db = exchange.getRequest().getURI().getRawPath().replace("/", "");
-//          final var newPath = String.format("/%s$%s$%s/", tenant, username, db);
-
           // 2. Mutate request with both Headers and the New URI
           final var mutatedRequest = exchange
               .getRequest()
