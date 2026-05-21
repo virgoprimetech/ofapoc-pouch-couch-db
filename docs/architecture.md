@@ -4,329 +4,347 @@ System architecture for the OFA offline-first Property Management System.
 
 ## Audience
 
-Developers joining or maintaining this project. You should understand React, TypeScript, and the basics of document databases before reading this document.
+Developers working on `ofa-web`, `ofa-gw`, `identity`, or `ofa-api`. Read this document to understand the offline-first client model, auth boundary, sync path, and backend responsibilities.
 
-## System overview
+## What this system is
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│  Browser                                                     │
-│  ┌─────────┐    ┌─────────┐    ┌───────────────────────┐    │
-│  │ Next.js │───▶│ PouchDB │───▶│ IndexedDB (local)     │    │
-│  │ React   │    │ (v9)    │    │ - reads: instant      │    │
-│  │ (v19)   │    │         │    │ - writes: immediate    │    │
-│  └─────────┘    └────┬────┘    │ - offline: full CRUD   │    │
-│                      │         └───────────────────────┘    │
-│                      │ live sync (bidirectional)            │
-└──────────────────────┼──────────────────────────────────────┘
-                       │
-                ┌──────▼──────┐
-                │   CouchDB   │  Sync relay + offline write buffer
-                │   (v3.x)    │  http://localhost:5984
-                └──────┬──────┘
-                       │ ETL
-                ┌──────▼──────┐
-                │ PostgreSQL  │  Source of truth
-                │   (v18)     │  ofa-api (Spring Boot 4)
-                └─────────────┘
-```
+OFA is an offline-first PMS proof of concept.
 
-**Data flow**: PostgreSQL is the source of truth. An ETL process handles PostgreSQL-to-CouchDB data transfer. PouchDB synchronizes with CouchDB bidirectionally. The web app reads and writes to PouchDB locally, then syncs when connectivity is available.
+The browser is the primary working surface. The app reads and writes local data through PouchDB first. PouchDB stores documents in IndexedDB and replicates with CouchDB when connectivity is available. Backend services treat PostgreSQL as the source of truth and synchronize data between PostgreSQL and CouchDB.
 
-**Key principle**: The browser never talks to PostgreSQL or the Spring Boot API directly. All data access goes through PouchDB. This makes the app offline-first by default — reads come from IndexedDB, and writes queue for sync.
+## Core principles
 
-## Tech stack
+- The browser reads and writes local data first.
+- IndexedDB is the browser persistence layer.
+- CouchDB is the sync relay and shared document store.
+- PostgreSQL is the source of truth.
+- `ofa-api` synchronizes data between CouchDB and PostgreSQL.
+- `ofa-gw` fronts identity and CouchDB endpoints for the web app.
+- `identity` authenticates users, resolves tenant context, and provisions CouchDB access.
 
-| Layer | Technology | Version |
-|-------|-----------|---------|
-| Framework | Next.js (App Router, Turbopack) | 16.2 |
-| Runtime | React | 19.2 |
-| Language | TypeScript | 5 |
-| Styling | Tailwind CSS (CSS-first `@theme`) | 4 |
-| Components | shadcn/ui (Radix-based) | CLI v4 |
-| Local database | PouchDB (IndexedDB adapter) | 9 |
-| Sync relay | CouchDB | 3.x |
-| Backend API | Spring Boot | 4 |
-| Relational DB | PostgreSQL | 18 |
-| Validation | Zod | 4 |
-| Icons | Remix Icon | latest |
-| Package manager | pnpm | latest |
-| Infrastructure | Docker Compose | latest |
+## System context (C4 level 1)
 
-## Project structure
+```mermaid
+flowchart LR
+    user[PMS user]
+    ofa[OFA offline-first PMS]
+    couch[(CouchDB)]
+    pg[(PostgreSQL)]
+    idp[External IdP<br/>future / optional]
 
-```
-├── compose.yaml                  # Docker Compose (PostgreSQL + CouchDB)
-├── scripts/
-│   └── init-couchdb.sh           # CouchDB one-time setup (CORS, single-node)
-├── .env.example                  # Environment variables template
-├── ofa-api/                      # Spring Boot 4 backend (Java)
-├── ofa-web/                      # Next.js 16 frontend (TypeScript)
-│   ├── src/
-│   │   ├── app/                  # Next.js App Router
-│   │   │   ├── layout.tsx        # Root layout (fonts, ClientShell)
-│   │   │   ├── globals.css       # Tailwind imports + CSS theme
-│   │   │   ├── (properties)/     # Route group (no URL segment)
-│   │   │   │   ├── property-client.tsx       # List page client component
-│   │   │   │   └── property-detail-client.tsx # Detail page client component
-│   │   │   ├── properties/
-│   │   │   │   └── [id]/
-│   │   │   │       ├── page.tsx      # SSR-safe wrapper (dynamic import)
-│   │   │   │       ├── loading.tsx   # Skeleton for client-side navigation
-│   │   │   │       ├── not-found.tsx # "Property not found" state
-│   │   │   │       └── error.tsx     # Error boundary with retry
-│   │   │   └── page.tsx          # Home → redirects to property list
-│   │   ├── components/
-│   │   │   ├── layout/          # App shell, sidebar, sync status
-│   │   │   ├── properties/      # Property CRUD components
-│   │   │   └── ui/              # shadcn/ui primitives
-│   │   ├── hooks/               # React hooks (use-toast, use-mobile)
-│   │   └── lib/
-│   │       ├── constants.ts     # Shared constants (status styles, type labels)
-│   │       ├── utils.ts         # cn() utility
-│   │       └── db/              # PouchDB data layer
-│   └── package.json
-└── docs/                        # Architecture documentation
+    user --> ofa
+    ofa --> couch
+    ofa --> pg
+    ofa -. optional federation .-> idp
 ```
 
-## Routing
+## Container view (C4 level 2)
 
-| Route | Component | Description |
-|-------|-----------|-------------|
-| `/` | `PropertyClient` | Property list with grid cards and create dialog |
-| `/properties/[id]` | `PropertyDetailClient` | Full detail view with edit/delete actions |
+```mermaid
+flowchart LR
+    subgraph Browser
+        web[ofa-web<br/>Next.js 16 + React 19<br/>UI + Server Actions + PouchDB client]
+    end
 
-The URL uses the bare UUID (for example, `/properties/abc-123`), not the prefixed `property::abc-123`. The repository layer handles prefix reconstruction internally.
+    gw[ofa-gw<br/>Spring Cloud Gateway]
+    identity[identity<br/>Spring Boot auth + tenant provisioning]
+    couch[(CouchDB<br/>global + scoped DBs)]
+    api[ofa-api<br/>Spring Boot ETL / reverse sync]
+    pg[(PostgreSQL<br/>source of truth)]
 
-### Route boundaries
-
-Every PouchDB-touching page uses `dynamic(() => import(...), { ssr: false })` because PouchDB references the browser `self` global and crashes during server rendering.
-
-Each route segment has three boundary files:
-
-| File | Purpose |
-|------|---------|
-| `loading.tsx` | Skeleton matching the page layout — shown during client-side navigation |
-| `not-found.tsx` | "Property not found" state with a back link — shown when the ID doesn't exist in local DB |
-| `error.tsx` | Error boundary with retry button — catches PouchDB crashes |
-
-## Data layer
-
-The data layer lives in `ofa-web/src/lib/db/` and has six files with clear separation of concerns:
-
-```
-src/lib/db/
-├── index.ts                 # PouchDB instance + Mango index
-├── schema.ts                # Zod schemas, TypeScript types, enum definitions
-├── property-repository.ts   # CRUD operations with Result<T, E> return types
-├── sync.ts                  # CouchDB sync, conflict resolution, status tracking
-├── use-properties.ts        # React hook: property list + live changes feed
-└── use-property.ts          # React hook: single property + doc-scoped changes feed
+    web -->|/identity/**| gw
+    web -->|/db/** sync traffic| gw
+    gw -->|auth routes| identity
+    gw -->|strip /db + forward| couch
+    identity -->|provision users / security| couch
+    api -->|read/write docs| couch
+    api -->|read/write rows| pg
 ```
 
-### PouchDB instance (`index.ts`)
+## Component view: browser runtime (C4 level 3)
 
-Creates a single PouchDB instance backed by IndexedDB:
+```mermaid
+flowchart TD
+    subgraph ofa-web
+        ui[App Router pages + UI components]
+        actions[Server Actions<br/>src/features/auth/actions.ts]
+        proxy[proxy.ts<br/>cookie-based route guard]
+        shell[Client shell + Sync provider]
+        repo[Repository + hooks]
+        sync[sync.ts]
+        conflict[conflict.ts]
+        pouch[PouchDB]
+        idb[(IndexedDB)]
+    end
 
-```typescript
-export const db = new PouchDB<PropertyDoc>("properties", {
-  auto_compaction: true,  // reclaim disk space automatically
-  revs_limit: 10,          // keep last 10 revisions for conflict resolution
-});
+    ui --> repo
+    ui --> actions
+    proxy --> ui
+    shell --> sync
+    repo --> pouch
+    sync --> pouch
+    conflict --> pouch
+    pouch --> idb
 ```
 
-Also creates a Mango query index on `type`, `status`, `tenant_id`, `updated_at`, and `deleted_at` — used for filtered queries.
+## Main runtime topology
 
-### Schema (`schema.ts`)
+```mermaid
+flowchart LR
+    subgraph Browser
+        ui[Next.js UI]
+        repo[Repository / hooks]
+        pouch[PouchDB]
+        idb[(IndexedDB)]
 
-Defines the data contract using Zod schemas. The schema is the single source of truth for both validation and TypeScript types — types are inferred with `z.infer`, never handwritten.
+        ui --> repo
+        repo --> pouch
+        pouch <--> idb
+    end
 
-**Document convention**: Every document has a `type` discriminator field (currently `"property"`) and an `_id` prefix (`property::`). The prefix enables efficient `allDocs` range queries. The `type` field enables Mango query filtering and filtered replication.
+    gw[ofa-gw]
+    couch[(CouchDB)]
+    api[ofa-api sync services]
+    pg[(PostgreSQL)]
 
-Example document:
-
-```typescript
-{
-  _id: "property::a1b2c3d4-...",
-  _rev: "1-abc...",
-  type: "property",
-  name: "Grand Hotel",
-  property_type: "HOTEL",
-  status: "DRAFT",
-  description: "",
-  address_line1: "",
-  city: "",
-  country: "",
-  tenant_id: "tenant::demo",
-  created_at: "2024-01-15T10:30:00.000Z",
-  updated_at: "2024-01-15T10:30:00.000Z",
-  deleted_at: null,
-}
+    pouch <-->|live replication| gw
+    gw --> couch
+    couch <-->|bootstrap + changes| api
+    api --> pg
+    pg --> api
 ```
 
-**Soft delete**: Documents are never hard-deleted with `_deleted: true`. Instead, the repository sets `deleted_at` to the current timestamp and changes `status` to `ARCHIVED`. All queries filter out documents where `deleted_at` is set.
+## Authentication and access flow
 
-**ID convention**: `_id` uses the format `{type}::uuid`. The `property::` prefix serves two purposes:
+The app separates sign-in from sync data access.
 
-1. **Storage partitioning**: `allDocs({ startkey: "property::", endkey: "property::\uffff" })` retrieves all property documents without a Mango index.
-2. **Namespace isolation**: When the schema grows to include rooms, bookings, and guests, each entity type gets its own prefix — no ID collisions across types.
+### Auth path
 
-The `type` discriminator field is not redundant with the prefix — it handles logical filtering (Mango queries, filtered replication) while the prefix handles storage-level partitioning.
+1. The user submits credentials in `ofa-web`.
+2. `ofa-web` calls Server Actions in `ofa-web/src/features/auth/actions.ts`.
+3. Server Actions call `ofa-gw` on `/identity/**`.
+4. `ofa-gw` forwards to `identity`.
+5. `identity` runs the login processor chain:
+   1. `TenantValidationProcessor`
+   2. `UserAuthenticationProcessor`
+   3. `RoleResolutionProcessor`
+   4. `TokenGenerationProcessor`
+6. `identity` returns access and refresh tokens.
+7. `ofa-web` stores tokens in httpOnly cookies: `ofa_access_token`, `ofa_refresh_token`.
+8. `ofa-web/proxy.ts` protects routes by cookie presence.
+9. `ofa-gw` validates JWTs against the identity JWKS endpoint.
 
-### Repository (`property-repository.ts`)
+### CouchDB access path
 
-All CRUD operations return a `Result<T, E>` discriminated union. Services never throw — callers check `result.success`:
+1. Browser sync targets `/db/**` through `ofa-gw`.
+2. `ofa-gw` strips `/db` before forwarding to CouchDB.
+3. Gateway forwarding removes the browser `Cookie` header.
+4. `CouchedbAuthorizationFilterFactory` derives upstream CouchDB auth headers from the authenticated JWT context.
+5. CouchDB accepts or rejects the request based on the effective database access.
 
-```typescript
-const result = await propertyRepository.create(input, tenantId);
-if (result.success) {
-  // result.data is the created PropertyDoc
-} else {
-  // result.error has kind + message for specific error handling
-}
+> **Note:** Current gateway auth injection is still implementation-in-progress. `ofa-gw/src/main/java/vn/com/primetech/ofagw/security/CouchedbAuthorizationFilterFactory.java` currently sets `X-Auth-CouchDB-*` headers with placeholder admin-oriented values and an HMAC token, while identity already exposes RSA/JWKS-based JWT verification for OFA auth.
+
+## Offline-first data flow
+
+### Read path
+
+```mermaid
+sequenceDiagram
+    participant UI as UI
+    participant Repo as Repository / hook
+    participant Pouch as PouchDB
+    participant IDB as IndexedDB
+
+    UI->>Repo: request data
+    Repo->>Pouch: query document(s)
+    Pouch->>IDB: read local state
+    IDB-->>Pouch: result
+    Pouch-->>Repo: document(s)
+    Repo-->>UI: render response
 ```
 
-Error types are discriminated by `kind`:
+Reads do not depend on network availability if the required documents already exist locally.
 
-| Method | Returns | Error kinds |
-|--------|---------|-------------|
-| `create(input, tenantId)` | `Result<PropertyDoc, CreateError>` | `VALIDATION`, `DB_ERROR` |
-| `getAll(tenantId?)` | `Result<PropertyDoc[], ReadError>` | `NOT_FOUND`, `DB_ERROR` |
-| `getById(id)` | `Result<PropertyDoc, ReadError>` | `NOT_FOUND`, `DB_ERROR` |
-| `getByStatus(status, tenantId?)` | `Result<PropertyDoc[], ReadError>` | `NOT_FOUND`, `DB_ERROR` |
-| `update(id, changes)` | `Result<PropertyDoc, UpdateError>` | `NOT_FOUND`, `VALIDATION`, `INVALID_TRANSITION`, `ACTIVATION_REQUIREMENTS`, `CONFLICT`, `DB_ERROR` |
-| `softDelete(id)` | `Result<PropertyDoc, DeleteError>` | `NOT_FOUND`, `CONFLICT`, `DB_ERROR` |
+### Write path
 
-The `getById` method accepts both prefixed IDs (`property::uuid`) and bare UUIDs — it reconstructs the prefix internally. This lets URLs use clean bare UUIDs while the database uses prefixed IDs.
+```mermaid
+sequenceDiagram
+    participant User as User action
+    participant Repo as Repository
+    participant Pouch as PouchDB
+    participant IDB as IndexedDB
+    participant GW as ofa-gw
+    participant Couch as CouchDB
+    participant API as ofa-api
+    participant PG as PostgreSQL
 
-The `update` method uses a read-merge-write pattern: it reads the current document, merges changes, stamps `updated_at`, preserves immutable fields (`_id`, `type`, `tenant_id`, `created_at`), and writes back with the current `_rev` for conflict detection.
-
-### Sync (`sync.ts`)
-
-Sync starts when the `SyncProvider` component mounts in the app shell. It uses bidirectional live replication with a two-layer exponential backoff strategy (PouchDB internal + lifecycle retry) and a generation counter to prevent stale event handlers.
-
-For the full sync reference including retry/backoff, status state machine, conflict detection, and SSR handling, see [pouchdb-couchdb-sync.md](pouchdb-couchdb-sync.md).
-
-**Sync status** uses a publish-subscribe pattern. Components subscribe with `onSyncStatusChange(callback)` and receive status updates: `idle`, `syncing`, `synced`, `error`, `offline`, or `retrying`.
-
-**Conflict resolution** supports three modes: automatic last-write-wins, manual quick resolution (pick a winning revision), and manual advanced resolution (field-level merge). PostgreSQL ETL is the final authority — the client resolves locally but the server can override.
-
-### React hooks
-
-**`useProperties(tenantId?)`** — reactive property list:
-
-```typescript
-const { properties, isLoading, error, create, update, softDelete, refetch } =
-  useProperties("tenant::demo");
+    User->>Repo: create / update / delete
+    Repo->>Pouch: validate + write doc
+    Pouch->>IDB: persist locally
+    IDB-->>Pouch: ack
+    Pouch-->>Repo: success
+    Repo-->>User: immediate UI update
+    Pouch->>GW: replicate when online
+    GW->>Couch: forward request
+    Couch->>API: changes available
+    API->>PG: import final doc state
 ```
 
-Uses PouchDB `changes()` with `live: true` and a filter function for automatic UI updates. The changes feed reference is stored in a `useRef` for safe cleanup on unmount.
+Local success is the first success condition. Server synchronization follows the local write.
 
-**`useProperty(id)`** — single property with live updates:
+### Bootstrap path
 
-```typescript
-const { property, isLoading, error, update, softDelete, refetch } =
-  useProperty("abc-123");
+```mermaid
+sequenceDiagram
+    participant PG as PostgreSQL
+    participant API as ofa-api
+    participant Couch as CouchDB
+    participant GW as ofa-gw
+    participant Pouch as PouchDB
+    participant IDB as IndexedDB
+    participant UI as UI
+
+    PG->>API: source data
+    API->>Couch: bootstrap / reverse sync
+    Pouch->>GW: pull replication
+    GW->>Couch: forward request
+    Couch-->>Pouch: documents
+    Pouch->>IDB: store locally
+    Pouch-->>UI: reactive updates
 ```
 
-Uses `doc_ids: [id]` for efficient single-document change tracking — only watches changes to the specific document, not the entire database.
+This path seeds the browser with server-side state when local data is empty or stale.
 
-**`useSyncStatus()`** — sync state for the sidebar indicator. Starts sync on mount, stops on unmount.
+### Conflict path
 
-**`useOnline()`** — network connectivity state from `navigator.onLine`. Used to show the offline banner and differentiate toast messages ("Saved locally" vs "Saved").
+```mermaid
+sequenceDiagram
+    participant C1 as Client A
+    participant C2 as Client B
+    participant Couch as CouchDB
+    participant Resolve as conflict.ts / sync.ts
+    participant API as ofa-api
+    participant PG as PostgreSQL
 
-## Component architecture
-
-```
-src/components/
-├── layout/
-│   ├── app-shell.tsx          # Sidebar + header + footer composition
-│   ├── client-shell.tsx       # SSR-safe wrapper (dynamic import)
-│   └── sync-status.tsx        # Sync status icon in sidebar footer
-├── properties/
-│   ├── property-form.tsx      # Shared form (17 fields) for create + edit
-│   ├── create-property-dialog.tsx  # Dialog wrapping PropertyForm
-│   ├── edit-property-dialog.tsx    # Dialog with initialData pre-population
-│   ├── property-card.tsx      # Card with Link header + action footer
-│   ├── confirm-delete-dialog.tsx   # Delete confirmation dialog
-│   └── toast-container.tsx    # Toast notifications
-└── ui/                        # shadcn/ui primitives
+    C1->>Couch: sync offline edit later
+    C2->>Couch: sync competing edit later
+    Couch-->>Resolve: conflicting revisions
+    Resolve->>Couch: auto-resolve or manual merge
+    Couch->>API: resolved document
+    API->>PG: import converged state
 ```
 
-### Rendering strategy
+PostgreSQL remains the final authority even though conflict handling starts in the client/CouchDB layer.
 
+## End-to-end data flow
+
+### Property created in browser
+
+```text
+Browser UI
+  → `property-repository.ts`
+  → PouchDB local write
+  → IndexedDB durable local state
+  → `sync.ts` replication via `ofa-gw`
+  → CouchDB document
+  → `ofa-api` SyncService / PropertySyncService
+  → PostgreSQL row
 ```
-layout.tsx (Server Component)
-  └── ClientShell (client boundary, dynamic import with ssr: false)
-        └── AppShell (client component)
-              ├── AppSidebar
-              │     └── SyncStatusIcon (lazy-loaded)
-              ├── AppHeader
-              ├── {children}  ← page content
-              └── AppFooter
+
+### Server-side data reaches browser
+
+```text
+PostgreSQL change
+  → `ofa-api` ReverseSyncService
+  → CouchDB document update
+  → browser live sync pull via `ofa-gw`
+  → PouchDB update
+  → React hooks changes feed
+  → UI rerender
 ```
 
-The `ClientShell` component exists as an SSR isolation boundary. It dynamically imports `AppShell` with `{ ssr: false }` to prevent PouchDB from crashing during server rendering. The root `layout.tsx` stays a Server Component — it only imports fonts and metadata.
+### Login plus tenant DB provisioning
 
-### Shared form pattern
+```text
+Login request
+  → `ofa-gw`
+  → `identity` auth chain
+  → tenant context resolution
+  → CouchDB user / security provisioning
+  → JWT issuance
+  → httpOnly cookies in `ofa-web`
+  → subsequent `/db` access via gateway
+```
 
-The `PropertyForm` component renders all 17 schema fields. It accepts `initialData?: PropertyDoc` — when provided, fields are pre-populated for editing. The form uses an HTML `id` attribute (`property-create-form` or `property-edit-form-{id}`) so submit buttons can target it via the `form` attribute from outside the `<form>` element (for example, from the dialog footer).
+## Runtime behavior in `ofa-web`
 
-### Property card navigation
+`ofa-web/src/lib/db/sync.ts` drives sync from the browser.
 
-The card header and content are wrapped in a Next.js `<Link>` to `/properties/{uuid}`. The footer (status dropdown, delete button) sits outside the link so those actions don't trigger navigation.
+- It builds sync targets from `NEXT_PUBLIC_COUCHDB_GLOBAL_DB` and tenant-scoped DB names derived from JWT claims.
+- It checks `/db/_up` through the gateway before opening replication.
+- It sends bearer tokens on sync requests.
+- It retries failed sync connections with exponential backoff and jitter.
+- It attempts token refresh after `401` or `403` responses.
+- It tracks aggregate sync state across all configured targets: `idle`, `syncing`, `synced`, `error`, `offline`, `retrying`.
 
-## Offline-first patterns
+## Offline behavior
 
-| Pattern | Implementation |
-|---------|---------------|
-| **Offline banner** | Detail page shows an amber banner: "Viewing offline — changes save locally" when `!isOnline` |
-| **Toast differentiation** | "Saved locally" when offline, "Saved" when online |
-| **Sync indicator** | Sidebar footer shows a wifi icon with status: Synced, Syncing, Offline, Error |
-| **Loading skeletons** | Matching skeleton layouts for both list and detail pages |
-| **Error boundaries** | `error.tsx` with retry button catches PouchDB crashes |
-| **Not-found state** | `not-found.tsx` handles missing or deleted properties |
-| **Local-first writes** | All writes go to PouchDB (IndexedDB) first, sync when online |
+| Scenario | Result |
+|---|---|
+| Browser online, CouchDB reachable | Local read/write plus background replication |
+| Browser offline | Local read/write continues against IndexedDB |
+| Browser reconnects | Sync health check runs, then replication restarts |
+| Access token expires during sync | Client refreshes token, then retries authenticated sync |
+| Same document edited in multiple clients | CouchDB stores conflict branches, then client/server converge |
+| Hard refresh while offline | Local DB persists, but app shell still depends on uncached web assets |
 
-### Offline scenarios
+> **Note:** This POC does not currently rely on a service worker for full app-shell offline delivery. The offline-first guarantee applies to local data behavior, not complete static asset caching.
 
-| Scenario | What happens |
-|----------|-------------|
-| **Normal operation** | PouchDB reads/writes IndexedDB locally. Sync runs in background. |
-| **Network drops** | All CRUD operations continue against local IndexedDB. Status indicator shows "Offline". |
-| **Network returns** | Sync resumes automatically. Changes upload to CouchDB. |
-| **Conflict** | Last-write-wins by `updated_at`. PostgreSQL ETL is the final authority. |
-| **Edit while offline** | Writes to local IndexedDB. Toast shows "Saved locally". Syncs when online. |
-| **Hard refresh while offline** | App shell not cached (no service worker). This is a known gap — all pages are equally affected. |
-| **Document not in local DB** | `useProperty` returns `property: null` → detail page shows "Not found" with a back link. |
+## Service responsibilities
 
-> **Note**: The app does not currently use a service worker. Adding Serwist for app shell caching is a separate task. For this POC, the data layer (PouchDB) handles offline correctly and the UI shows proper states for all offline scenarios.
+| Service | Responsibility |
+|---|---|
+| `ofa-web` | UI, auth actions, local-first reads/writes, sync lifecycle, conflict UX |
+| `ofa-gw` | Web ingress, `/identity/**` and `/db/**` routing, JWT validation, upstream CouchDB header mediation |
+| `identity` | Login, refresh, JWT issuance, JWKS exposure, tenant context, CouchDB user/security provisioning |
+| `ofa-api` | ETL import from CouchDB, reverse sync from PostgreSQL, checkpointing |
+| CouchDB | Shared sync store, replication endpoint, conflict retention |
+| PostgreSQL | Source of truth for business data |
 
-## Infrastructure
+## Key code locations
 
-Docker Compose runs three services:
+| Area | Files |
+|---|---|
+| Browser auth | `ofa-web/src/features/auth/actions.ts`, `ofa-web/proxy.ts` |
+| Browser sync | `ofa-web/src/lib/db/sync.ts`, `ofa-web/src/components/providers/sync-provider.tsx` |
+| Browser conflicts | `ofa-web/src/lib/db/conflict.ts` |
+| Browser DB model | `ofa-web/src/lib/db/index.ts`, `ofa-web/src/lib/db/schema.ts` |
+| Gateway CouchDB proxy | `ofa-gw/src/main/resources/application.yaml`, `ofa-gw/src/main/java/vn/com/primetech/ofagw/security/CouchedbAuthorizationFilterFactory.java` |
+| Identity auth | `identity/src/main/java/com/primetech/poc/identity/features/auth/` |
+| Identity RSA / JWKS | `identity/src/main/java/com/primetech/poc/identity/shared/jose/` |
+| Identity multi-tenancy | `identity/src/main/java/com/primetech/poc/identity/shared/multitenancy/` |
+| Identity CouchDB integration | `identity/src/main/java/com/primetech/poc/identity/shared/couchdb/` |
+| API sync | `ofa-api/src/main/java/com/primetech/poc/ofaapi/features/sync/application/` |
 
-| Service | Image | Port | Purpose |
-|---------|-------|------|---------|
-| `ofa-postgres` | `postgres:18.3-alpine` | 5432 | Source of truth for ofa-api |
-| `couchdb` | `couchdb:latest` | 5984 | PouchDB sync target |
-| `couchdb-init` | `curlimages/curl:latest` | — | One-time CouchDB setup (single-node cluster, CORS) |
+## Deployment shape for local development
 
-Both databases use named Docker volumes (`pgdata`, `couchdata`) for data persistence.
+```text
+Developer machine
+├── Browser
+├── ofa-web dev server
+├── ofa-gw
+├── identity
+├── ofa-api
+├── CouchDB container
+└── PostgreSQL container
+```
 
-CouchDB is configured with CORS enabled and single-node cluster mode by the `couchdb-init` container, which runs `scripts/init-couchdb.sh` once and exits.
+`compose.yaml` starts PostgreSQL, CouchDB, and the CouchDB init container. Spring services and the Next.js app run separately during development.
 
-### Credentials (development only)
+## Related documents
 
-| Service | User | Password |
-|---------|------|----------|
-| PostgreSQL | `postgres` | `postgres` |
-| CouchDB | `admin` | `admin` |
-
-### Useful URLs
-
-| Service | URL |
-|---------|-----|
-| Frontend | http://localhost:3000 |
-| CouchDB Fauxton UI | http://localhost:5984/_utils |
-| PostgreSQL | `localhost:5432` |
+- [README.md](../README.md)
+- [pouchdb-couchdb-sync.md](./pouchdb-couchdb-sync.md)
+- [etl-sync.md](./etl-sync.md)
+- [architecture/authentication.md](./architecture/authentication.md)
+- [couchdb docs](./couchdb/)

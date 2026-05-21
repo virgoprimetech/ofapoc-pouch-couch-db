@@ -40,7 +40,7 @@ spring:
             - id: couchdb
               uri: http://localhost:5984
               predicates:
-                - Path=/db/**, /_session, /_all_dbs
+                - Path=/db/**
               filters:
                 - StripPrefix=1
                 # Spring matches "CouchedbAuthorization" to your "CouchedbAuthorizationFilterFactory"
